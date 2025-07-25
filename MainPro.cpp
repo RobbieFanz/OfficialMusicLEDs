@@ -70,13 +70,42 @@ void FFT(complex<double>* f, int N, double d) {
 
 // ------------- Bluetooth Discoverable -------------
 void makeDiscoverable() {
-    system("bluetoothctl << EOF\n"
-           "power on\n"
-           "agent on\n"
-           "discoverable on\n"
-           "pairable on\n"
-           "EOF");
-    std::cout << "[+] Pi is now discoverable and pairable.\n";
+    FILE* bt = popen("bluetoothctl", "w");
+    if (!bt) {
+        std::cerr << "[-] Failed to open bluetoothctl\n";
+        return;
+    }
+
+    fprintf(bt, "power on\n");
+    fprintf(bt, "agent NoInputNoOutput\n");      // Enables auto-accepting pairing requests
+    fprintf(bt, "default-agent\n");
+    fprintf(bt, "discoverable on\n");
+    fprintf(bt, "pairable on\n");
+    fflush(bt);
+    pclose(bt);
+
+    std::cout << "[+] Pi is now discoverable, pairable, and will auto-trust new devices.\n";
+}
+
+void trustAllConnectedDevices() {
+    FILE* fp = popen("bluetoothctl devices Connected", "r");
+    if (!fp) {
+        std::cerr << "[-] Failed to list connected devices.\n";
+        return;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), fp)) {
+        std::string l(line);
+        if (l.find("Device") == 0) {
+            std::string mac = l.substr(7, 17); // "Device XX:XX:XX:XX:XX:XX ..."
+            std::string cmd = "bluetoothctl trust " + mac;
+            system(cmd.c_str());
+            std::cout << "[+] Trusted connected device: " << mac << std::endl;
+        }
+    }
+
+    pclose(fp);
 }
 
 // ------------- Wait for iPhone A2DP Connection -------------
@@ -137,6 +166,11 @@ static int paCallback(const void* inputBuffer, void*, unsigned long framesPerBuf
 // ------------- Main Program -------------
 int main() {
     makeDiscoverable();
+
+    std::cout << "[*] Waiting for iPhone to initiate connection...\n";
+    sleep(10);
+
+    trustAllConnectedDevices();
 
     std::string btSource = waitForBluetoothAudioSource();
     setDefaultPulseSource(btSource);
