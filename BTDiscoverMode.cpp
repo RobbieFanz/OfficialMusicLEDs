@@ -26,3 +26,9 @@ void makePiDiscoverable() {
 
     std::cout << "Done. Pi should now be discoverable!\n";
 }
+
+int main(){
+    makePiDiscoverable();
+    return 0;
+    
+}
