@@ -5,9 +5,10 @@ echo "Setting up bluetoothctl..."
 bluetoothctl << EOF
 agent on
 default-agent
+power on
 discoverable on
 pairable on
-power on
+
 EOF
 
 echo "Waiting for a device to connect..."
