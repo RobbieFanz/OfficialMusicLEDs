@@ -1,8 +1,7 @@
 #!/bin/bash
 
-echo "Starting Bluetooth pairing agent..."
-
-# Start bluetoothctl in the background and configure basic settings
+# Start bluetoothctl and set agent, default, and discoverable
+echo "Setting up bluetoothctl..."
 bluetoothctl << EOF
 agent on
 default-agent
@@ -11,50 +10,43 @@ pairable on
 power on
 EOF
 
-echo "Waiting for pairing requests..."
+echo "Waiting for a device to connect..."
 
-# Run expect to handle pairing interaction
-expect << 'EOD'
+# Monitor bluetoothctl output to detect the first device that attempts to pair
+while true; do
+    output=$(timeout 5 bluetoothctl devices | grep Device)
+    
+    if [ ! -z "$output" ]; then
+        # Get the first MAC address
+        mac=$(echo "$output" | head -n 1 | awk '{print $2}')
+        echo "Found device: $mac"
+
+        # Use expect to handle pairing confirmation
+        expect << EOD
 spawn bluetoothctl
 expect "#"
-
-send "agent on\r"
-expect "#"
-
-send "default-agent\r"
-expect "#"
-
-send "discoverable on\r"
-expect "#"
-
-send "pairable on\r"
-expect "#"
-
-send "scan on\r"
+send "pair $mac\r"
 expect {
-    -re ".*Device ([0-9A-F:]+) .*" {
-        set mac $expect_out(1,string)
-        send_user "\nFound device: $mac\n"
-
-        send "pair $mac\r"
-        expect {
-            "Confirm passkey" {
-                send "yes\r"
-                exp_continue
-            }
-            "Pairing successful" {
-                send "trust $mac\r"
-                expect "#"
-                send "connect $mac\r"
-                expect "#"
-                send_user "\nDevice $mac paired, trusted, and connected.\n"
-                exit
-            }
-            timeout {
-                send_user "Pairing timed out\n"
-                exit 1
-            }
-        }
+    "Confirm passkey" {
+        send "yes\r"
+        exp_continue
+    }
+    "Pairing successful" {
+        send "trust $mac\r"
+        expect "#"
+        send "connect $mac\r"
+        expect "#"
+    }
+    timeout {
+        send_user "Pairing timed out\n"
+        exit 1
     }
 }
 EOD
+
+        echo "Device $mac paired, trusted, and connected."
+        break
+    fi
+
+    sleep 2
+done
