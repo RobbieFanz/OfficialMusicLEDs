@@ -5,15 +5,13 @@ echo "Setting up bluetoothctl..."
 bluetoothctl << EOF
 agent on
 default-agent
-power on
 discoverable on
-pairable on
-
 EOF
 
 echo "Waiting for a device to connect..."
 
 # Monitor bluetoothctl output to detect the first device that attempts to pair
+# Loop until we find a MAC address
 while true; do
     output=$(timeout 5 bluetoothctl devices | grep Device)
     
@@ -22,28 +20,12 @@ while true; do
         mac=$(echo "$output" | head -n 1 | awk '{print $2}')
         echo "Found device: $mac"
 
-        # Use expect to handle pairing confirmation
-        expect << EOD
-spawn bluetoothctl
-expect "#"
-send "pair $mac\r"
-expect {
-    "Confirm passkey" {
-        send "yes\r"
-        exp_continue
-    }
-    "Pairing successful" {
-        send "trust $mac\r"
-        expect "#"
-        send "connect $mac\r"
-        expect "#"
-    }
-    timeout {
-        send_user "Pairing timed out\n"
-        exit 1
-    }
-}
-EOD
+        # Pair, trust, and connect to the device
+        bluetoothctl << EOF
+pair $mac
+trust $mac
+connect $mac
+EOF
 
         echo "Device $mac paired, trusted, and connected."
         break
